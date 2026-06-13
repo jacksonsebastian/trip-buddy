@@ -1,0 +1,165 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Users ───────────────────────────────────────────────
+model User {
+  id            String    @id @default(cuid())
+  name          String
+  email         String    @unique
+  password      String
+  image         String?
+  role          GlobalRole @default(USER)
+
+  tripsCreated  Trip[]    @relation("TripCreator")
+  memberships   Member[]
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+enum GlobalRole {
+  USER
+  SUPERADMIN
+}
+
+// ─── Trip ────────────────────────────────────────────────
+model Trip {
+  id              String     @id @default(cuid())
+  name            String
+  destination     String
+  description     String?
+  startDate       DateTime
+  endDate         DateTime
+  perPersonBudget Float
+  coverImage      String?
+  status          TripStatus @default(ACTIVE)
+
+  createdById     String
+  createdBy       User       @relation("TripCreator", fields: [createdById], references: [id])
+
+  members         Member[]
+  expenses        Expense[]
+  payments        Payment[]
+  gallery         Gallery[]
+
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+}
+
+enum TripStatus {
+  ACTIVE
+  CLOSED
+}
+
+// ─── Members ─────────────────────────────────────────────
+model Member {
+  id            String       @id @default(cuid())
+  name          String
+  email         String?
+  mobileNumber  String?
+  profilePhoto  String?
+  role          MemberRole   @default(MEMBER)
+
+  tripId        String
+  trip          Trip         @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  userId        String?
+  user          User?        @relation(fields: [userId], references: [id])
+
+  paymentsMade    Payment[]  @relation("PaymentMember")
+  expensesPaid    Expense[]  @relation("ExpensePaidBy")
+  galleryUploads  Gallery[]
+
+  createdAt     DateTime     @default(now())
+
+  @@unique([tripId, email])
+}
+
+enum MemberRole {
+  ADMIN
+  MEMBER
+}
+
+// ─── Payments ────────────────────────────────────────────
+model Payment {
+  id            String        @id @default(cuid())
+  amount        Float
+  paymentDate   DateTime
+  upiRef        String?
+  notes         String?
+  proofImage    String?
+  status        PaymentStatus @default(PENDING)
+
+  tripId        String
+  trip          Trip          @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  memberId      String
+  member        Member        @relation("PaymentMember", fields: [memberId], references: [id], onDelete: Cascade)
+
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+}
+
+enum PaymentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+// ─── Expenses ────────────────────────────────────────────
+model Expense {
+  id            String          @id @default(cuid())
+  title         String
+  category      ExpenseCategory
+  amount        Float
+  date          DateTime
+  notes         String?
+  billImage     String?
+
+  tripId        String
+  trip          Trip            @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  paidById      String?
+  paidBy        Member?         @relation("ExpensePaidBy", fields: [paidById], references: [id])
+
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+}
+
+enum ExpenseCategory {
+  HOTEL
+  FOOD
+  PETROL
+  TOLL
+  ACTIVITIES
+  SHOPPING
+  MISC
+}
+
+// ─── Gallery ─────────────────────────────────────────────
+model Gallery {
+  id            String    @id @default(cuid())
+  url           String
+  publicId      String?   // Cloudinary public_id for deletion
+  type          MediaType
+  caption       String?
+
+  tripId        String
+  trip          Trip      @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  uploadedById  String
+  uploadedBy    Member    @relation(fields: [uploadedById], references: [id])
+
+  createdAt     DateTime  @default(now())
+}
+
+enum MediaType {
+  IMAGE
+  VIDEO
+}
