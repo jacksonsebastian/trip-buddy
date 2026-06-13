@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { formatDate } from "@/lib/utils";
-import JSZip from 'jszip';
+import JSZip from 'jszip'; // Not used anymore but keeping for compatibility if needed
 import { Download, Search, X, ImageIcon, Film, User, Plus, Loader2, UploadCloud, AlertCircle } from "lucide-react";
 
 interface GalleryTabProps {
@@ -32,73 +32,71 @@ export default function GalleryTab({ trip, currentMemberId }: GalleryTabProps) {
     );
   };
 
-  const handleDownloadSelected = async (downloadAll = false) => {
+  // Helper to extract Drive ID from our saved URLs
+  const getDriveId = (url: string) => {
     try {
-      setDownloadingZip(true);
-      const itemsToDownload = downloadAll 
-        ? filtered 
-        : filtered.filter((item: any) => selectedGalleryIds.includes(item.id));
-        
-      if (itemsToDownload.length === 0) return;
+      const urlObj = new URL(url);
+      return urlObj.searchParams.get('id');
+    } catch {
+      return null;
+    }
+  };
 
-      const zip = new JSZip();
-      const folder = zip.folder("trip_gallery");
+  // Helper to get a high-quality thumbnail for displaying in the UI
+  const getThumbnailUrl = (url: string) => {
+    const id = getDriveId(url);
+    if (!id) return url;
+    return `https://drive.google.com/thumbnail?id=${id}&sz=w1000`;
+  };
 
-      for (const item of itemsToDownload) {
-        try {
-          const response = await fetch(item.url);
-          const blob = await response.blob();
-          
-          let ext = item.type === "VIDEO" ? ".mp4" : ".jpg";
-          let filename = item.url.split('/').pop()?.split('?')[0];
-          if (!filename || !filename.includes('.')) {
-            filename = `${item.id}${ext}`;
-          }
-          folder?.file(filename, blob);
-        } catch (err) {
-          console.error("Failed to fetch image for zip", item.url, err);
-        }
-      }
-
-      const content = await zip.generateAsync({ type: "blob" });
-      const url = URL.createObjectURL(content);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `trip_${trip.name?.replace(/\s+/g, '_') || 'buddy'}_gallery.zip`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+  const handleDownloadSelected = async (downloadAll = false) => {
+    const itemsToDownload = downloadAll 
+      ? filtered 
+      : filtered.filter((item: any) => selectedGalleryIds.includes(item.id));
       
+    if (itemsToDownload.length === 0) return;
+
+    setDownloadingZip(true);
+
+    // Instead of zipping (which fails due to CORS), we trigger native downloads
+    // We stagger them by 500ms so the browser doesn't block them as popup spam
+    itemsToDownload.forEach((item: any, index: number) => {
+      setTimeout(() => {
+        const id = getDriveId(item.url);
+        if (!id) return;
+        
+        // This specific Google Drive URL forces a direct download
+        const downloadUrl = `https://drive.google.com/uc?export=download&id=${id}`;
+        
+        const iframe = document.createElement('iframe');
+        iframe.style.display = 'none';
+        iframe.src = downloadUrl;
+        document.body.appendChild(iframe);
+        
+        // Clean up the iframe after 5 seconds
+        setTimeout(() => document.body.removeChild(iframe), 5000);
+      }, index * 500);
+    });
+    
+    setTimeout(() => {
+      setDownloadingZip(false);
       setIsSelectionMode(false);
       setSelectedGalleryIds([]);
-    } catch (error) {
-      console.error("Error creating zip:", error);
-    } finally {
-      setDownloadingZip(false);
-    }
+    }, itemsToDownload.length * 500);
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     setErrorMsg("");
     const files = Array.from(e.target.files || []);
     const validFiles: {file: File, preview: string, type: "IMAGE"|"VIDEO"}[] = [];
-    let hasError = false;
 
     files.forEach((file) => {
       const isVideo = file.type.startsWith("video/");
-      const maxSize = isVideo ? 100 * 1024 * 1024 : 10 * 1024 * 1024; 
-      
-      if (file.size > maxSize) {
-        hasError = true;
-        setErrorMsg(`Some files were too large. Max: 10MB for images, 100MB for videos.`);
-      } else {
-        validFiles.push({
-          file,
-          preview: URL.createObjectURL(file),
-          type: isVideo ? "VIDEO" : "IMAGE"
-        });
-      }
+      validFiles.push({
+        file,
+        preview: URL.createObjectURL(file),
+        type: isVideo ? "VIDEO" : "IMAGE"
+      });
     });
 
     setSelectedFiles((prev) => [...prev, ...validFiles]);
@@ -121,39 +119,65 @@ export default function GalleryTab({ trip, currentMemberId }: GalleryTabProps) {
     setUploadProgress(0);
 
     try {
-      const sigRes = await fetch("/api/upload", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ folder: "trip_buddy/gallery" }),
-      });
-      const { signature, timestamp, cloudName, apiKey, folder } = await sigRes.json();
+      const tokenRes = await fetch("/api/drive/token", { method: "POST" });
+      if (!tokenRes.ok) throw new Error("Failed to get Google Drive token");
+      const { accessToken, folderId } = await tokenRes.json();
 
       for (let i = 0; i < selectedFiles.length; i++) {
         const { file, type } = selectedFiles[i];
         
-        const uploadData = new FormData();
-        uploadData.append("file", file);
-        uploadData.append("api_key", apiKey);
-        uploadData.append("timestamp", timestamp);
-        uploadData.append("signature", signature);
-        uploadData.append("folder", folder);
+        // 1. Initialize Resumable Upload
+        const metadata = {
+          name: file.name,
+          parents: [folderId]
+        };
 
-        const resourceType = type === "VIDEO" ? "video" : "image";
-        const cloudinaryRes = await fetch(
-          `https://api.cloudinary.com/v1_1/${cloudName}/${resourceType}/upload`,
-          { method: "POST", body: uploadData }
-        );
-        const cloudinaryData = await cloudinaryRes.json();
+        const initRes = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
+            "X-Upload-Content-Type": file.type || "application/octet-stream",
+            "X-Upload-Content-Length": file.size.toString()
+          },
+          body: JSON.stringify(metadata)
+        });
 
-        if (!cloudinaryData.secure_url) {
+        const uploadUrl = initRes.headers.get("Location");
+        if (!uploadUrl) {
+          console.error("Failed to get upload URL for", file.name);
+          continue;
+        }
+
+        // 2. Upload actual file data
+        const uploadRes = await fetch(uploadUrl, {
+          method: "PUT",
+          headers: {
+            "Content-Type": file.type || "application/octet-stream"
+          },
+          body: file
+        });
+        
+        if (!uploadRes.ok) {
+          const errText = await uploadRes.text();
+          console.error("PUT 403 Error Details:", errText);
+          throw new Error(`Upload failed: ${errText}`);
+        }
+
+        const driveData = await uploadRes.json();
+        
+        if (!driveData.id) {
           console.error("Upload failed for", file.name);
           continue;
         }
 
+        // 3. Save direct download link to our database
+        const driveUrl = `https://drive.google.com/uc?export=view&id=${driveData.id}`;
+        
         await fetch(`/api/trips/${trip.id}/gallery`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ url: cloudinaryData.secure_url, caption: "", type }),
+          body: JSON.stringify({ url: driveUrl, caption: "", type }),
         });
         
         setUploadProgress(i + 1);
@@ -254,7 +278,7 @@ export default function GalleryTab({ trip, currentMemberId }: GalleryTabProps) {
               <UploadCloud className="h-10 w-10 text-primary mb-3" />
               <p className="text-base sm:text-lg font-semibold text-foreground mb-1">Select Images & Videos</p>
               <p className="text-xs sm:text-sm text-muted-foreground mb-6 text-center">
-                Max file size: 10MB images, 100MB videos
+                High-quality, uncompressed uploads supported
               </p>
               <label 
                 htmlFor="gallery-upload"
@@ -358,7 +382,7 @@ export default function GalleryTab({ trip, currentMemberId }: GalleryTabProps) {
                 </div>
               ) : (
                 <img
-                  src={item.url}
+                  src={getThumbnailUrl(item.url)}
                   alt={item.caption || "Gallery image"}
                   className={`h-full w-full object-cover transition-transform ${isSelected ? 'scale-105' : 'group-hover:scale-105'}`}
                   loading="lazy"
@@ -414,7 +438,7 @@ export default function GalleryTab({ trip, currentMemberId }: GalleryTabProps) {
                 />
               ) : (
                 <img
-                  src={selectedItem.url}
+                  src={getThumbnailUrl(selectedItem.url)}
                   alt={selectedItem.caption || "Gallery image"}
                   className="h-full w-full object-contain"
                 />
@@ -430,9 +454,8 @@ export default function GalleryTab({ trip, currentMemberId }: GalleryTabProps) {
                   </div>
                 </div>
                 <a
-                  href={selectedItem.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                  href={`https://drive.google.com/uc?export=download&id=${getDriveId(selectedItem.url)}`}
+                  download
                   className="flex items-center gap-1.5 rounded-lg bg-primary/10 px-3 py-1.5 text-sm font-medium text-primary hover:bg-primary/20 transition-colors"
                 >
                   <Download className="h-4 w-4" />

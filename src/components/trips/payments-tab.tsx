@@ -33,30 +33,51 @@ export default function PaymentsTab({ trip, isAdmin, currentMemberId }: Payments
 
     const formData = new FormData(e.currentTarget);
     const proofFile = formData.get("proof") as File;
-    let proofImageUrl = null;
+    let proofImageUrl: string | null = null;
 
     if (proofFile && proofFile.size > 0) {
       try {
-        const sigRes = await fetch("/api/upload", {
+        const tokenRes = await fetch("/api/drive/token", { method: "POST" });
+        if (!tokenRes.ok) throw new Error("Failed to get Google Drive token");
+        const { accessToken, folderId } = await tokenRes.json();
+
+        const metadata = {
+          name: proofFile.name,
+          parents: [folderId]
+        };
+
+        const initRes = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ folder: "payments" }),
+          headers: {
+            "Authorization": `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
+            "X-Upload-Content-Type": proofFile.type || "application/octet-stream",
+            "X-Upload-Content-Length": proofFile.size.toString()
+          },
+          body: JSON.stringify(metadata)
         });
-        const { signature, timestamp, cloudName, apiKey } = await sigRes.json();
 
-        const uploadData = new FormData();
-        uploadData.append("file", proofFile);
-        uploadData.append("signature", signature);
-        uploadData.append("timestamp", timestamp);
-        uploadData.append("api_key", apiKey);
-        uploadData.append("folder", "payments");
-
-        const cloudRes = await fetch(
-          `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`,
-          { method: "POST", body: uploadData }
-        );
-        const cloudData = await cloudRes.json();
-        proofImageUrl = cloudData.secure_url;
+        const uploadUrl = initRes.headers.get("Location");
+        if (uploadUrl) {
+          const uploadRes = await fetch(uploadUrl, {
+            method: "PUT",
+            headers: {
+              "Content-Type": proofFile.type || "application/octet-stream"
+            },
+            body: proofFile
+          });
+          
+          if (!uploadRes.ok) {
+            const errText = await uploadRes.text();
+            console.error("PUT 403 Error Details:", errText);
+            throw new Error(`Upload failed: ${errText}`);
+          }
+          
+          const driveData = await uploadRes.json();
+          if (driveData.id) {
+            proofImageUrl = `https://drive.google.com/uc?export=view&id=${driveData.id}`;
+          }
+        }
       } catch (error) {
         console.error("Proof image upload error:", error);
       }
