@@ -50,7 +50,7 @@ export default function DashboardLayout({
             <div className="flex h-8 w-8 items-center justify-center rounded-lg gradient-primary">
               <MapPin className="h-4 w-4 text-white" />
             </div>
-            <span className="font-bold text-lg gradient-text">Trip Buddy</span>
+            <span className="font-bold text-lg gradient-text">Tripmate</span>
           </div>
           <Link
             href="/login"
@@ -77,7 +77,7 @@ export default function DashboardLayout({
             <div className="flex h-9 w-9 items-center justify-center rounded-lg gradient-primary">
               <MapPin className="h-4 w-4 text-white" />
             </div>
-            <span className="text-lg font-bold gradient-text">Trip Buddy</span>
+            <span className="text-lg font-bold gradient-text">Tripmate</span>
           </div>
 
           {/* Nav Links */}
@@ -137,7 +137,7 @@ export default function DashboardLayout({
             <div className="flex h-8 w-8 items-center justify-center rounded-lg gradient-primary">
               <MapPin className="h-4 w-4 text-white" />
             </div>
-            <span className="text-base font-bold gradient-text">Trip Buddy</span>
+            <span className="text-base font-bold gradient-text">Tripmate</span>
           </div>
           <button
             onClick={() => setSidebarOpen(!sidebarOpen)}

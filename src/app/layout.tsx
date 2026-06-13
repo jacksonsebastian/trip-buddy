@@ -11,11 +11,11 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Trip Buddy — Plan, Track & Settle Group Trips",
+  title: "Tripmate — Plan, Track & Settle Group Trips",
   description:
-    "All-in-one trip management for friend groups. Track budgets, payments, expenses, share photos, and settle up — all from your phone.",
+    "The ultimate companion for your group adventures. Split expenses, plan itineraries, and manage memories together.",
   keywords: ["trip tracker", "group expenses", "splitwise alternative", "travel budget"],
-  authors: [{ name: "Trip Buddy" }],
+  authors: [{ name: "Jackson" }],
 };
 
 export const viewport: Viewport = {

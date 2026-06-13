@@ -60,7 +60,7 @@ export default function LandingPage() {
             <div className="flex h-10 w-10 items-center justify-center rounded-xl gradient-primary shadow-lg">
               <MapPin className="h-5 w-5 text-white" />
             </div>
-            <span className="text-xl font-bold gradient-text">Trip Buddy</span>
+            <span className="text-xl font-bold gradient-text">Tripmate</span>
           </div>
           <div className="flex items-center gap-3">
             <Link
@@ -92,8 +92,8 @@ export default function LandingPage() {
               <span className="gradient-text">not spreadsheets.</span>
             </h1>
             <p className="mb-10 text-lg text-muted-foreground sm:text-xl">
-              Track budgets, split expenses, collect payments, share photos — all in one
-              place. Trip Buddy makes group travel effortless.
+              Your all-in-one group travel organizer. Split expenses, plan itineraries, and share memories in one
+              place. Tripmate makes group travel effortless.
             </p>
             <div className="flex flex-col items-center justify-center gap-4 sm:flex-row">
               <Link
@@ -187,7 +187,8 @@ export default function LandingPage() {
 
       {/* Footer */}
       <footer className="relative z-10 border-t border-border/50 py-8 text-center text-sm text-muted-foreground">
-        <p>© {new Date().getFullYear()} Trip Buddy. Built with ❤️ for travelers.</p>
+        <p>© {new Date().getFullYear()} Tripmate</p>
+        <p className="mt-1 font-medium">Developed with ❤️ by Jackson</p>
       </footer>
     </div>
   );

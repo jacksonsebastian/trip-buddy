@@ -68,7 +68,7 @@ export default function RegisterPage() {
             <div className="flex h-12 w-12 items-center justify-center rounded-xl gradient-primary shadow-lg">
               <MapPin className="h-6 w-6 text-white" />
             </div>
-            <span className="text-2xl font-bold gradient-text">Trip Buddy</span>
+            <span className="text-2xl font-bold gradient-text">Tripmate</span>
           </Link>
           <p className="mt-3 text-muted-foreground">Create your account to get started.</p>
         </div>
